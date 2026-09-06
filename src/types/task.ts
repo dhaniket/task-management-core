@@ -37,3 +37,15 @@ export interface UpdateTaskInput {
   description?: string;
   priority?: TaskPriority;
 }
+
+export interface TaskFilter {
+  status?: TaskStatus;
+  priority?: TaskPriority;
+}
+
+export interface TaskSummary {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+}

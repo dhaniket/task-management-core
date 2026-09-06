@@ -1,57 +1,120 @@
-import type {
-  CreateTaskInput,
-  Task
-} from "./types/task.js";
+import "dotenv/config";
 
-function createTask(
-  input: CreateTaskInput
-): Task {
+import {
+  InMemoryTaskStore
+} from "./stores/in-memory-task-store.js";
 
-  const now = new Date();
+import {
+  TaskService
+} from "./services/task-service.js";
 
-  return {
-    id: crypto.randomUUID(),
-
-    title: input.title,
-
-    ...(input.description !== undefined
-      ? { description: input.description }
-      : {}),
-
-    status: "todo",
-
-    priority: input.priority ?? "medium",
-
-    createdAt: now,
-
-    updatedAt: now
-  };
-}
-
-
-const task = createTask({
-  title: "Learn TypeScript and Node.js",
-  description: "Complete Day 2",
-  priority: "high"
-});
-
-const tasks: Task[] = [];
-tasks.push(task);
-
-function getHighPriorityTasks(
-  tasks: Task[]
-): Task[] {
-
-  return tasks.filter(
-    (task) => task.priority === "high"
-  );
-}
-
-import 'dotenv/config';
 
 const appName =
   process.env.APP_NAME
   ?? "Task Management Core";
 
 
-console.log(`Starting ${appName}`);
+console.log(
+  `Starting ${appName}`
+);
+
+
+const store =
+  new InMemoryTaskStore();
+
+
+const taskService =
+  new TaskService(store);
+
+
+const firstTask =
+  await taskService.createTask({
+    title:
+      "Learn TypeScript and Node.js",
+
+    description:
+      "Complete Day 2 Stage 2",
+
+    priority:
+      "high"
+  });
+
+
+console.log(
+  "Created:",
+  firstTask
+);
+
+const retrievedTask =
+  await taskService.getTask(
+    firstTask.id
+  );
+
+
+console.log(
+  "Retrieved:",
+  retrievedTask
+);
+
+await taskService.createTask({
+  title: "Practice DSA",
+  priority: "high"
+});
+
+
+await taskService.createTask({
+  title: "Read documentation",
+  priority: "low"
+});
+
+const allTasks =
+  await taskService.listTasks();
+
+
+console.log(
+  "All tasks:",
+  allTasks
+);
+
+const highPriorityTasks =
+  await taskService.listTasks({
+    priority: "high"
+  });
+
+
+console.log(
+  "High priority:",
+  highPriorityTasks
+);
+
+const updatedTask =
+  await taskService.updateTask(
+    firstTask.id,
+    {
+      title:
+        "Master TypeScript and Node.js",
+
+      priority:
+        "medium"
+    }
+  );
+
+
+console.log(
+  "Updated:",
+  updatedTask
+);
+
+const inProgressTask =
+  await taskService.changeTaskStatus(
+    firstTask.id,
+    "in_progress"
+  );
+console.log(inProgressTask);
+
+const completedTask =
+  await taskService.changeTaskStatus(
+    firstTask.id,
+    "done"
+  );
+console.log(completedTask);
