@@ -2,6 +2,12 @@ import {
   randomUUID
 } from "node:crypto";
 
+import {
+  InvalidTaskTransitionError,
+  TaskNotFoundError,
+  TaskValidationError
+} from "../errors/task-errors.js";
+
 import type {
   CreateTaskInput,
   Task,
@@ -47,7 +53,7 @@ export class TaskService {
 
 
   if (normalized.length === 0) {
-    throw new Error(
+    throw new TaskValidationError(
       `${fieldName} cannot be empty`
     );
   }
@@ -145,8 +151,8 @@ async updateTask(
 
 
   if (task === undefined) {
-    throw new Error(
-      "Task not found"
+    throw new TaskNotFoundError(
+      id
     );
   }
 
@@ -200,8 +206,8 @@ async changeTaskStatus(
 
 
   if (task === undefined) {
-    throw new Error(
-      "Task not found"
+    throw new TaskNotFoundError(
+      id
     );
   }
 
@@ -218,9 +224,9 @@ async changeTaskStatus(
 
 
   if (!allowed.includes(nextStatus)) {
-    throw new Error(
-      `Invalid transition: ` +
-      `${task.status} -> ${nextStatus}`
+    throw new InvalidTaskTransitionError(
+      task.status,
+      nextStatus
     );
   }
 

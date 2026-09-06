@@ -1,8 +1,20 @@
 import "dotenv/config";
+import {
+  InvalidTaskTransitionError,
+  TaskNotFoundError,
+  TaskValidationError
+} from "./errors/task-errors.js";
 
 import {
-  InMemoryTaskStore
-} from "./stores/in-memory-task-store.js";
+  TaskStoreError
+} from "./errors/task-store-error.js";
+import {
+  JsonFileTaskStore
+} from "./stores/json-file-task-store.js";
+
+import {
+  resolve
+} from "node:path";
 
 import {
   TaskService
@@ -19,102 +31,97 @@ console.log(
 );
 
 
+
+const dataFile =
+  resolve(
+    process.cwd(),
+    process.env.TASK_DATA_FILE
+      ?? "data/tasks.json"
+  );
+
+
 const store =
-  new InMemoryTaskStore();
+  new JsonFileTaskStore(
+    dataFile
+  );
 
 
 const taskService =
   new TaskService(store);
 
+async function main():
+  Promise<void> {
 
-const firstTask =
-  await taskService.createTask({
-    title:
-      "Learn TypeScript and Node.js",
+  const tasks =
+    await taskService.listTasks();
 
-    description:
-      "Complete Day 2 Stage 2",
-
-    priority:
-      "high"
-  });
-
-
-console.log(
-  "Created:",
-  firstTask
-);
-
-const retrievedTask =
-  await taskService.getTask(
-    firstTask.id
+  console.log(
+    "Tasks:",
+    tasks
   );
+}
 
 
-console.log(
-  "Retrieved:",
-  retrievedTask
-);
+try {
 
-await taskService.createTask({
-  title: "Practice DSA",
-  priority: "high"
-});
+  await main();
+
+} catch (error: unknown) {
+
+  if (
+    error instanceof TaskNotFoundError
+  ) {
+
+    console.error(
+      `Task ${error.taskId} does not exist`
+    );
+
+  } else if (
+    error instanceof
+      InvalidTaskTransitionError
+  ) {
+
+    console.error(
+      `Cannot change task from ` +
+      `${error.from} to ${error.to}`
+    );
+
+  } else if (
+    error instanceof
+      TaskValidationError
+  ) {
+
+    console.error(
+      error.message
+    );
+
+  } else if (
+    error instanceof TaskStoreError
+  ) {
+
+    console.error(
+      "Task storage failure:",
+      error.message
+    );
+
+  } else if (
+    error instanceof Error
+  ) {
+
+    console.error(
+      "Unexpected error:",
+      error.message
+    );
+
+  } else {
+
+    console.error(
+      "Unknown failure:",
+      error
+    );
+  }
 
 
-await taskService.createTask({
-  title: "Read documentation",
-  priority: "low"
-});
+  process.exitCode = 1;
+}
 
-const allTasks =
-  await taskService.listTasks();
-
-
-console.log(
-  "All tasks:",
-  allTasks
-);
-
-const highPriorityTasks =
-  await taskService.listTasks({
-    priority: "high"
-  });
-
-
-console.log(
-  "High priority:",
-  highPriorityTasks
-);
-
-const updatedTask =
-  await taskService.updateTask(
-    firstTask.id,
-    {
-      title:
-        "Master TypeScript and Node.js",
-
-      priority:
-        "medium"
-    }
-  );
-
-
-console.log(
-  "Updated:",
-  updatedTask
-);
-
-const inProgressTask =
-  await taskService.changeTaskStatus(
-    firstTask.id,
-    "in_progress"
-  );
-console.log(inProgressTask);
-
-const completedTask =
-  await taskService.changeTaskStatus(
-    firstTask.id,
-    "done"
-  );
-console.log(completedTask);
