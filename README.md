@@ -20,7 +20,7 @@ Implemented so far:
 - UUID generation
 - Default task status and priority
 - Type-safe arrays and filtering
-- Environment-variable access
+- Environment-variable configuration with `dotenv`
 - Type inference and narrowing fundamentals
 - `unknown` vs `any`
 - Type checking and TypeScript compilation
@@ -227,28 +227,63 @@ Runs the compiled JavaScript using Node.js.
 
 ## Environment Variables
 
-Node.js environment variables are available through:
+The project uses **dotenv** to load environment-specific configuration from a local `.env` file.
 
-```typescript
-process.env
+Install it with:
+
+```bash
+npm install dotenv
 ```
 
-Example:
+Create a local `.env` file in the project root:
+
+```env
+APP_NAME=Task Management Core
+```
+
+The `.env` file is excluded from Git through `.gitignore` because environment files may eventually contain secrets or machine-specific configuration.
+
+Load the variables in the application with:
+
+```typescript
+import "dotenv/config";
+```
+
+Then access them through Node.js:
 
 ```typescript
 const appName =
   process.env.APP_NAME ??
   "Task Management Core";
+
+console.log(`Starting ${appName}`);
 ```
 
-PowerShell example:
+The flow is:
 
-```powershell
-$env:APP_NAME="Task Management Core"
-npm run dev
+```text
+.env
+ ↓
+dotenv
+ ↓
+process.env
+ ↓
+application configuration
 ```
 
-Secrets and environment-specific configuration should not be hard-coded into source files.
+`dotenv` does not replace `process.env`; it loads values from the `.env` file into Node.js's environment-variable interface.
+
+Environment-specific values such as these should not be hard-coded into source code:
+
+```text
+DATABASE_URL
+REDIS_URL
+PORT
+API_KEY
+NODE_ENV
+```
+
+For the current Stage 1 project, `APP_NAME` is enough to demonstrate the pattern.
 
 ## Type Safety Principles Used
 
@@ -347,7 +382,7 @@ This project is being used to understand:
 - `unknown` vs `any`
 - npm and package management basics
 - ES modules
-- Node.js environment variables
+- Node.js environment variables with `dotenv`
 - TypeScript compilation
 - Basic domain modelling
 
