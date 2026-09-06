@@ -1,29 +1,38 @@
 # Task Management Core
 
-A strongly typed task-management core built with **TypeScript** and **Node.js** as part of a backend engineering preparation roadmap.
+A strongly typed **TypeScript + Node.js** task-management application built as part of a backend engineering preparation roadmap.
 
-The project currently focuses on domain modelling, TypeScript fundamentals, Node.js runtime concepts, clean typing, and basic task creation logic. REST APIs, databases, and web frameworks are intentionally not included yet.
+The project focuses on clean domain modelling, strict TypeScript, Node.js runtime features, business-rule enforcement, dependency injection, persistent JSON storage, runtime validation, typed error handling, and CLI interaction.
 
-## Current Scope
+> This project intentionally does **not** include REST APIs, Express, PostgreSQL, Redis, Docker, or other later-stage technologies.
 
-Implemented so far:
+---
 
-- Strict TypeScript project setup
-- Node.js runtime setup
-- npm-based development workflow
-- ES module configuration
-- Task domain modelling
-- Task status and priority union types
-- Create/update input contracts
-- Readonly and optional properties
-- Typed task creation
-- UUID generation
-- Default task status and priority
-- Type-safe arrays and filtering
-- Environment-variable configuration with `dotenv`
-- Type inference and narrowing fundamentals
-- `unknown` vs `any`
-- Type checking and TypeScript compilation
+## Features
+
+- Create tasks
+- List all tasks
+- Start tasks
+- Complete tasks
+- Delete tasks
+- Task priority support
+- Controlled task-status transitions
+- UUID-based task IDs
+- Persistent JSON-file storage
+- Automatic task-data file creation
+- Runtime validation of persisted JSON
+- Safe Date serialization/deserialization
+- Typed domain errors
+- Storage-specific errors
+- Environment configuration with `dotenv`
+- CLI command parsing
+- Strict TypeScript configuration
+- Generic utility functions
+- Dependency injection
+- In-memory and JSON-backed store implementations
+- Safer temporary-file replacement when persisting data
+
+---
 
 ## Tech Stack
 
@@ -31,7 +40,63 @@ Implemented so far:
 - Node.js
 - npm
 - tsx
+- dotenv
+- Node.js `fs/promises`
+- Node.js `crypto`
+- Node.js `path`
 - Git
+
+---
+
+## Architecture
+
+```text
+CLI / process.argv
+        │
+        ▼
+     index.ts
+        │
+        ▼
+   TaskService
+        │
+        ▼
+ TaskStore interface
+    ▲         ▲
+    │         │
+InMemory   JsonFile
+ TaskStore  TaskStore
+               │
+               ▼
+        data/tasks.json
+```
+
+### Responsibilities
+
+#### CLI Layer
+Parses terminal commands and converts them into application operations.
+
+#### TaskService
+Contains task-related business rules such as:
+
+- default task priority
+- default task status
+- input normalization
+- task updates
+- valid task-status transitions
+- missing-task handling
+
+#### TaskStore
+Defines the persistence contract used by `TaskService`.
+
+#### InMemoryTaskStore
+Stores tasks in memory.
+
+Useful for simple development and future testing.
+
+#### JsonFileTaskStore
+Persists tasks to a JSON file using asynchronous Node.js filesystem APIs.
+
+---
 
 ## Project Structure
 
@@ -39,46 +104,93 @@ Implemented so far:
 task-management-core/
 ├── src/
 │   ├── index.ts
+│   │
+│   ├── cli/
+│   │   └── command-handler.ts
+│   │
+│   ├── errors/
+│   │   ├── task-errors.ts
+│   │   └── task-store-error.ts
+│   │
+│   ├── services/
+│   │   └── task-service.ts
+│   │
+│   ├── stores/
+│   │   ├── task-store.ts
+│   │   ├── in-memory-task-store.ts
+│   │   └── json-file-task-store.ts
+│   │
 │   ├── types/
 │   │   └── task.ts
-│   └── services/
+│   │
+│   └── utils/
+│       └── find-by-id.ts
+│
 ├── data/
+│   └── .gitkeep
+│
+├── .env
 ├── .gitignore
+├── README.md
 ├── package.json
 ├── package-lock.json
 └── tsconfig.json
 ```
 
-The `services/` and `data/` directories are reserved for functionality introduced in later stages.
+---
 
 ## Domain Model
 
 ### Task Status
 
-A task can currently have one of three statuses:
-
 ```typescript
-type TaskStatus =
+export type TaskStatus =
   | "todo"
   | "in_progress"
   | "done";
 ```
 
-Using a union instead of a general `string` prevents unsupported task states from being represented accidentally.
+The application only allows these transitions:
 
-### Task Priority
+```text
+todo
+  ↓
+in_progress
+  ↓
+done
+```
+
+Direct transitions such as:
+
+```text
+todo → done
+```
+
+are rejected by business logic.
+
+---
+
+## Task Priority
 
 ```typescript
-type TaskPriority =
+export type TaskPriority =
   | "low"
   | "medium"
   | "high";
 ```
 
-### Task
+If no priority is supplied when creating a task, the application defaults to:
+
+```text
+medium
+```
+
+---
+
+## Task
 
 ```typescript
-interface Task {
+export interface Task {
   readonly id: string;
   title: string;
   description?: string;
@@ -89,85 +201,371 @@ interface Task {
 }
 ```
 
-The `id` and `createdAt` properties are readonly because they represent identity and creation metadata that should not be modified after a task is created.
+`id` and `createdAt` are readonly because they represent task identity and creation metadata.
 
-### Create Task Input
+---
+
+## Create Task Input
 
 ```typescript
-interface CreateTaskInput {
+export interface CreateTaskInput {
   title: string;
   description?: string;
   priority?: TaskPriority;
 }
 ```
 
-Creation input is intentionally separate from the stored `Task` model.
-
-The application generates or controls:
+The caller does not provide:
 
 - `id`
 - `status`
 - `createdAt`
 - `updatedAt`
 
-If no priority is provided, the application defaults it to `medium`.
+Those values are controlled by the application.
 
-New tasks start with the `todo` status.
+---
 
-### Update Task Input
+## Update Task Input
 
 ```typescript
-interface UpdateTaskInput {
+export interface UpdateTaskInput {
   title?: string;
   description?: string;
   priority?: TaskPriority;
 }
 ```
 
-Status changes are intentionally excluded from the generic update model so that task-status transitions can later be handled as explicit business behaviour.
+Status is intentionally excluded from generic updates.
 
-## Task Creation
+Status changes go through explicit business rules.
 
-Tasks are created through typed application logic.
+---
+
+## Generic Utility
+
+The project includes a generic lookup helper:
+
+```typescript
+interface Identifiable {
+  readonly id: string;
+}
+
+export function findById<
+  T extends Identifiable
+>(
+  items: readonly T[],
+  id: string
+): T | undefined {
+  return items.find(
+    (item) => item.id === id
+  );
+}
+```
+
+This works with any type that contains:
+
+```typescript
+id: string
+```
+
+while preserving its actual return type.
+
+---
+
+## Task Store Abstraction
+
+```typescript
+export interface TaskStore {
+  save(
+    task: Task
+  ): Promise<Task>;
+
+  findById(
+    id: string
+  ): Promise<Task | undefined>;
+
+  findAll():
+    Promise<Task[]>;
+
+  update(
+    task: Task
+  ): Promise<Task>;
+
+  delete(
+    id: string
+  ): Promise<boolean>;
+}
+```
+
+`TaskService` depends on this interface rather than a specific storage implementation.
+
+That allows:
+
+```typescript
+new TaskService(
+  new InMemoryTaskStore()
+);
+```
+
+or:
+
+```typescript
+new TaskService(
+  new JsonFileTaskStore(filePath)
+);
+```
+
+without rewriting the business logic.
+
+---
+
+## Dependency Injection
+
+The project uses constructor injection:
+
+```typescript
+const store =
+  new JsonFileTaskStore(
+    dataFile
+  );
+
+const service =
+  new TaskService(
+    store
+  );
+```
+
+`TaskService` does not create its own store.
+
+This keeps business logic independent from persistence details.
+
+---
+
+## Persistent JSON Storage
+
+The JSON-backed store uses:
+
+```typescript
+node:fs/promises
+```
+
+for asynchronous filesystem operations.
+
+Tasks are persisted to:
+
+```text
+data/tasks.json
+```
+
+Runtime data is excluded from Git.
+
+---
+
+## Domain vs Persistence Representation
+
+The domain model uses:
+
+```typescript
+createdAt: Date;
+updatedAt: Date;
+```
+
+JSON stores dates as strings.
+
+Therefore the file store uses a persistence model conceptually like:
+
+```typescript
+interface StoredTask {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+When writing:
+
+```text
+Task
+ ↓
+Date.toISOString()
+ ↓
+StoredTask
+ ↓
+JSON
+```
+
+When reading:
+
+```text
+JSON
+ ↓
+runtime validation
+ ↓
+StoredTask
+ ↓
+new Date(...)
+ ↓
+Task
+```
+
+---
+
+## Runtime Validation
+
+TypeScript only protects values known during development.
+
+It cannot guarantee that external runtime data is valid.
+
+Examples of external boundaries include:
+
+- JSON files
+- HTTP requests
+- databases
+- environment variables
+- third-party APIs
+
+For persisted JSON, the project follows:
+
+```text
+External JSON
+     ↓
+unknown
+     ↓
+runtime validation
+     ↓
+trusted typed data
+```
+
+The project uses user-defined type guards such as:
+
+```typescript
+value is StoredTask
+```
+
+to safely narrow `unknown` values.
+
+---
+
+## Empty JSON File Handling
+
+If `tasks.json` exists but is empty, the application treats it as an empty task collection and can repair it to:
+
+```json
+[]
+```
+
+This prevents:
+
+```text
+Unexpected end of JSON input
+```
+
+from crashing normal first-run usage.
+
+---
+
+## Safer File Writes
+
+Instead of overwriting the main JSON file directly, the project writes to a temporary file first:
+
+```text
+tasks.json.tmp
+      ↓
+rename
+      ↓
+tasks.json
+```
+
+This reduces the chance of leaving the main file partially written if something goes wrong during persistence.
+
+It is still a learning-oriented persistence approach and is not a substitute for a transactional database.
+
+---
+
+## Typed Errors
+
+### Domain Errors
+
+Examples include:
+
+```typescript
+TaskNotFoundError
+InvalidTaskTransitionError
+TaskValidationError
+```
+
+These represent application/business failures.
+
+### Storage Error
+
+```typescript
+TaskStoreError
+```
+
+represents infrastructure failures such as:
+
+- unreadable files
+- malformed JSON
+- invalid persisted records
+- write failures
+
+This separation keeps business errors distinct from persistence errors.
+
+---
+
+## Environment Variables
+
+The project uses **dotenv**.
+
+Install:
+
+```bash
+npm install dotenv
+```
+
+Create:
+
+```text
+.env
+```
+
+Example:
+
+```env
+APP_NAME=Task Management Core
+TASK_DATA_FILE=data/tasks.json
+```
+
+Load it using:
+
+```typescript
+import "dotenv/config";
+```
+
+Then access values through:
+
+```typescript
+process.env
+```
 
 Example:
 
 ```typescript
-const task = createTask({
-  title: "Learn TypeScript and Node.js",
-  description: "Complete Day 2",
-  priority: "high"
-});
+const appName =
+  process.env.APP_NAME
+  ?? "Task Management Core";
 ```
 
-The application generates values such as:
+The `.env` file is excluded from Git.
 
-```text
-id        → UUID
-status    → todo
-priority  → supplied value or medium
-createdAt → current timestamp
-updatedAt → current timestamp
-```
+---
 
-## TypeScript Configuration
-
-The project uses strict compiler settings.
-
-Important options include:
-
-```json
-{
-  "strict": true,
-  "noUncheckedIndexedAccess": true,
-  "exactOptionalPropertyTypes": true,
-  "noImplicitReturns": true
-}
-```
-
-These settings help expose unsafe assumptions during development rather than at runtime.
-
-## Development Setup
+## Installation
 
 ### Prerequisites
 
@@ -185,13 +583,15 @@ npm --version
 git --version
 ```
 
-### Install Dependencies
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-## Available Commands
+---
+
+## Available Scripts
 
 ### Development
 
@@ -199,15 +599,15 @@ npm install
 npm run dev
 ```
 
-Runs the TypeScript entry point using `tsx`.
+Runs the TypeScript application using `tsx`.
 
-### Type Check
+### Type Checking
 
 ```bash
 npm run typecheck
 ```
 
-Runs the TypeScript compiler without emitting JavaScript.
+Runs TypeScript static checking without generating JavaScript.
 
 ### Build
 
@@ -215,7 +615,17 @@ Runs the TypeScript compiler without emitting JavaScript.
 npm run build
 ```
 
-Compiles TypeScript from `src/` into JavaScript under `dist/`.
+Compiles:
+
+```text
+src/*.ts
+```
+
+into:
+
+```text
+dist/*.js
+```
 
 ### Run Compiled Application
 
@@ -223,198 +633,324 @@ Compiles TypeScript from `src/` into JavaScript under `dist/`.
 npm start
 ```
 
-Runs the compiled JavaScript using Node.js.
+Runs the compiled application with Node.js.
 
-## Environment Variables
+---
 
-The project uses **dotenv** to load environment-specific configuration from a local `.env` file.
+## CLI Usage
 
-Install it with:
+Show help:
 
 ```bash
-npm install dotenv
+npm run dev -- help
 ```
 
-Create a local `.env` file in the project root:
+List tasks:
 
-```env
-APP_NAME=Task Management Core
+```bash
+npm run dev -- list
 ```
 
-The `.env` file is excluded from Git through `.gitignore` because environment files may eventually contain secrets or machine-specific configuration.
+Create a task:
 
-Load the variables in the application with:
-
-```typescript
-import "dotenv/config";
+```bash
+npm run dev -- create "Learn TypeScript"
 ```
 
-Then access them through Node.js:
+Create a high-priority task:
 
-```typescript
-const appName =
-  process.env.APP_NAME ??
-  "Task Management Core";
-
-console.log(`Starting ${appName}`);
+```bash
+npm run dev -- create "Learn Node.js" high
 ```
 
-The flow is:
+Start a task:
 
-```text
-.env
- ↓
-dotenv
- ↓
-process.env
- ↓
-application configuration
+```bash
+npm run dev -- start <task-id>
 ```
 
-`dotenv` does not replace `process.env`; it loads values from the `.env` file into Node.js's environment-variable interface.
+Complete a task:
 
-Environment-specific values such as these should not be hard-coded into source code:
-
-```text
-DATABASE_URL
-REDIS_URL
-PORT
-API_KEY
-NODE_ENV
+```bash
+npm run dev -- complete <task-id>
 ```
 
-For the current Stage 1 project, `APP_NAME` is enough to demonstrate the pattern.
+Delete a task:
 
-## Type Safety Principles Used
-
-### Prefer Domain-Specific Types
-
-Instead of:
-
-```typescript
-status: string
+```bash
+npm run dev -- delete <task-id>
 ```
 
-the project uses:
+---
 
-```typescript
-status: TaskStatus
+## Example Workflow
+
+Create:
+
+```bash
+npm run dev -- create "Learn TypeScript" high
 ```
-
-This makes invalid states harder to represent.
-
-### Prefer `unknown` Over `any`
-
-`any` disables much of TypeScript's protection.
-
-For genuinely unknown data, prefer `unknown` and narrow the type before using it.
 
 Example:
 
-```typescript
-function printValue(value: unknown): void {
-  if (typeof value === "string") {
-    console.log(value.toUpperCase());
-  }
-}
+```text
+Created task: 8ab833df-b083-47bb-aefa-7e687d09c48f
+Learn TypeScript [high]
 ```
 
-### Use Type Inference Where Appropriate
+List:
 
-TypeScript can infer callback values from typed collections.
-
-```typescript
-function getHighPriorityTasks(
-  tasks: Task[]
-): Task[] {
-  return tasks.filter(
-    (task) => task.priority === "high"
-  );
-}
+```bash
+npm run dev -- list
 ```
 
-The callback parameter is inferred as `Task`.
-
-## Current Architecture
-
-At the current stage:
+Example:
 
 ```text
-TypeScript Domain Types
-        ↓
-Application Functions
-        ↓
-Node.js Runtime
+8ab833df-b083-47bb-aefa-7e687d09c48f [todo] [high] Learn TypeScript
 ```
 
-The project does not yet contain HTTP or database layers.
+Start:
 
-That separation is deliberate so TypeScript and Node.js fundamentals can be learned before REST/API design and persistence are introduced.
+```bash
+npm run dev -- start 8ab833df-b083-47bb-aefa-7e687d09c48f
+```
 
-## Planned Next Stage
+Complete:
 
-The next stage will introduce:
+```bash
+npm run dev -- complete 8ab833df-b083-47bb-aefa-7e687d09c48f
+```
 
-- Task service layer
-- Node.js module organization
-- Task lookup/update operations
-- Explicit task-status transitions
-- Business rules
-- Type narrowing in application logic
-- Generics
-- Structured error handling
+Delete:
 
-These are planned features and are not claimed as implemented yet.
+```bash
+npm run dev -- delete 8ab833df-b083-47bb-aefa-7e687d09c48f
+```
 
-## Learning Goals
+---
 
-This project is being used to understand:
+## TypeScript Concepts Practised
 
-- TypeScript's relationship with JavaScript
-- TypeScript's relationship with Node.js
-- Static typing vs runtime behaviour
-- Interfaces and type aliases
+- Primitive types
+- Type inference
+- Type aliases
+- Interfaces
 - Union types
 - Optional properties
-- Readonly properties
-- Type inference
+- `readonly`
+- Arrays
+- Function typing
+- `unknown`
+- `any`
 - Type narrowing
-- `unknown` vs `any`
-- npm and package management basics
+- User-defined type guards
+- Generics
+- Generic constraints
+- `Record<K, V>`
+- `Promise<T>`
+- `async` / `await`
+- Discriminated unions
+- `never`
+- Exhaustive switch checking
 - ES modules
-- Node.js environment variables with `dotenv`
-- TypeScript compilation
-- Basic domain modelling
 
-## Git
+---
 
-Generated directories such as the following should not be committed:
+## Node.js Concepts Practised
 
-```text
-node_modules/
-dist/
+- Node.js runtime
+- npm
+- `package.json`
+- ES modules
+- `node:crypto`
+- `node:path`
+- `node:fs/promises`
+- `process.env`
+- `process.argv`
+- `process.cwd()`
+- `process.exitCode`
+- Environment variables
+- dotenv
+- Asynchronous filesystem operations
+- JSON serialization/deserialization
+- CLI applications
+- Runtime persistence
+
+---
+
+## Strict TypeScript Configuration
+
+The project uses strict compiler settings such as:
+
+```json
+{
+  "strict": true,
+  "noUncheckedIndexedAccess": true,
+  "exactOptionalPropertyTypes": true,
+  "noImplicitReturns": true
+}
 ```
 
-A suitable `.gitignore` includes:
+These settings intentionally surface unsafe assumptions during development.
+
+---
+
+## TypeScript vs Runtime Validation
+
+TypeScript can reject:
+
+```typescript
+const priority:
+  TaskPriority = "urgent";
+```
+
+during development.
+
+But a user can still type:
+
+```text
+urgent
+```
+
+into the CLI.
+
+Therefore external input must still be validated at runtime.
+
+This distinction is fundamental to backend engineering:
+
+```text
+Compile-time types
+        ≠
+Runtime validation
+```
+
+---
+
+## Business Rules vs Type Rules
+
+TypeScript can ensure:
+
+```text
+"done"
+```
+
+is a valid `TaskStatus`.
+
+It cannot automatically know whether this transition is valid:
+
+```text
+todo → done
+```
+
+That requires runtime business logic.
+
+The project therefore separates:
+
+```text
+Type safety
+    ↓
+Is the value structurally valid?
+
+Business logic
+    ↓
+Is this operation allowed?
+```
+
+---
+
+## Current Persistence Limitations
+
+The JSON implementation currently:
+
+```text
+reads entire file
+      ↓
+modifies task array
+      ↓
+writes entire file
+```
+
+This is suitable for a small learning project.
+
+It is not designed for:
+
+- millions of tasks
+- high concurrency
+- multiple writers
+- transactions
+- advanced querying
+- production-scale durability
+
+A proper database such as PostgreSQL will address those concerns in a later project/day.
+
+---
+
+## Git Ignore
+
+Recommended:
 
 ```gitignore
 node_modules/
 dist/
 .env
 *.log
+
+data/*.json
+data/*.tmp
 ```
 
-A suitable first commit for this stage is:
+To preserve the empty data directory:
 
-```bash
-git add .
-git commit -m "chore: initialize TypeScript Node task core"
+```text
+data/.gitkeep
 ```
 
-## Status
+may be committed.
 
-**Day 2 — TypeScript + Node.js**
+---
 
-Stage 1 foundation implemented / in progress.
+## Suggested Git History
 
-The project will continue to evolve through the remaining Day 2 stages without adding REST APIs or databases prematurely.
+Example progression:
+
+```text
+docs: finalize TypeScript Node project documentation
+
+feat: add task management CLI
+
+feat: add persistent JSON task store
+
+refactor: add typed task domain errors
+
+feat: add typed task service and status workflow
+
+chore: initialize TypeScript Node task core
+```
+
+---
+
+## Project Status
+
+### Day 2 — TypeScript + Node.js ✅
+
+Completed areas:
+
+- TypeScript fundamentals
+- Node.js fundamentals
+- Typed domain modelling
+- Service-layer business logic
+- Storage abstraction
+- Dependency injection
+- In-memory storage
+- Persistent JSON storage
+- Async filesystem operations
+- Runtime validation
+- Typed errors
+- CLI interaction
+- Environment configuration
+- Git workflow
+
+The project is intentionally complete at this scope.
+
+REST/API design, relational databases, caching, messaging, containers, cloud infrastructure, and AI functionality belong to later stages of the roadmap.
