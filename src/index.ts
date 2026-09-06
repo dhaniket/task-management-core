@@ -1,4 +1,21 @@
 import "dotenv/config";
+
+import {
+  resolve
+} from "node:path";
+
+import {
+  handleCommand
+} from "./cli/command-handler.js";
+
+import {
+  TaskService
+} from "./services/task-service.js";
+
+import {
+  JsonFileTaskStore
+} from "./stores/json-file-task-store.js";
+
 import {
   InvalidTaskTransitionError,
   TaskNotFoundError,
@@ -8,28 +25,6 @@ import {
 import {
   TaskStoreError
 } from "./errors/task-store-error.js";
-import {
-  JsonFileTaskStore
-} from "./stores/json-file-task-store.js";
-
-import {
-  resolve
-} from "node:path";
-
-import {
-  TaskService
-} from "./services/task-service.js";
-
-
-const appName =
-  process.env.APP_NAME
-  ?? "Task Management Core";
-
-
-console.log(
-  `Starting ${appName}`
-);
-
 
 
 const dataFile =
@@ -46,21 +41,23 @@ const store =
   );
 
 
-const taskService =
-  new TaskService(store);
+const service =
+  new TaskService(
+    store
+  );
 
 async function main():
   Promise<void> {
 
-  const tasks =
-    await taskService.listTasks();
+  const args =
+    process.argv.slice(2);
 
-  console.log(
-    "Tasks:",
-    tasks
+
+  await handleCommand(
+    service,
+    args
   );
 }
-
 
 try {
 
@@ -73,7 +70,7 @@ try {
   ) {
 
     console.error(
-      `Task ${error.taskId} does not exist`
+      error.message
     );
 
   } else if (
@@ -82,8 +79,7 @@ try {
   ) {
 
     console.error(
-      `Cannot change task from ` +
-      `${error.from} to ${error.to}`
+      error.message
     );
 
   } else if (
@@ -100,7 +96,7 @@ try {
   ) {
 
     console.error(
-      "Task storage failure:",
+      "Storage error:",
       error.message
     );
 
@@ -109,15 +105,13 @@ try {
   ) {
 
     console.error(
-      "Unexpected error:",
       error.message
     );
 
   } else {
 
     console.error(
-      "Unknown failure:",
-      error
+      "Unknown error"
     );
   }
 

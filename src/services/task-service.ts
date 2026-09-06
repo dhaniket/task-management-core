@@ -245,4 +245,19 @@ async changeTaskStatus(
   );
 }
 
+async deleteTask(
+  id: string
+): Promise<void> {
+
+  const deleted =
+    await this.store.delete(id);
+
+
+  if (!deleted) {
+    throw new TaskNotFoundError(
+      id
+    );
+  }
+}
+
 }

@@ -438,4 +438,36 @@ private async writeTasks(
     );
   }
 }
+
+async delete(
+  id: string
+): Promise<boolean> {
+
+  const tasks =
+    await this.readTasks();
+
+
+  const remainingTasks =
+    tasks.filter(
+      (task) =>
+        task.id !== id
+    );
+
+
+  if (
+    remainingTasks.length
+    === tasks.length
+  ) {
+    return false;
+  }
+
+
+  await this.writeTasks(
+    remainingTasks
+  );
+
+
+  return true;
+}
+
 }

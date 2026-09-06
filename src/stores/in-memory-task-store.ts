@@ -63,4 +63,29 @@ export class InMemoryTaskStore
 
     return task;
   }
+
+  async delete(
+  id: string
+): Promise<boolean> {
+
+  const index =
+    this.tasks.findIndex(
+      (task) => task.id === id
+    );
+
+
+  if (index === -1) {
+    return false;
+  }
+
+
+  this.tasks.splice(
+    index,
+    1
+  );
+
+
+  return true;
+  }
+
 }

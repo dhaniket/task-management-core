@@ -18,4 +18,8 @@ export interface TaskStore {
   update(
     task: Task
   ): Promise<Task>;
+
+  delete(
+  id: string
+  ): Promise<boolean>;
 }
